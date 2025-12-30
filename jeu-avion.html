@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Jeu Avion Final</title>
+
+<style>
+body {
+  background:black;
+  color:white;
+  text-align:center;
+  font-family:Arial;
+}
+#score, #bestScore { font-size:24px; margin-bottom:5px; }
+#bestScore { color:yellow; }
+#lifeBar {
+  width:300px;
+  height:20px;
+  border:2px solid white;
+  margin:10px auto;
+}
+#life {
+  height:100%;
+  width:100%;
+  background:lime;
+}
+#game {
+  width:600px;
+  height:600px;
+  border:2px solid white;
+  margin:auto;
+  position:relative;
+  overflow:hidden;
+  cursor:none;
+}
+/* Joueur */
+#player {
+  width:80px;
+  height:80px;
+  position:absolute;
+  bottom:20px;
+  left:260px;
+  background:linear-gradient(#00c6ff,#0072ff);
+  clip-path: polygon(
+    50% 0%, 65% 25%, 100% 35%, 70% 55%,
+    60% 100%, 40% 100%, 30% 55%, 0% 35%, 35% 25%
+  );
+  box-shadow:0 0 20px cyan;
+}
+/* Balles */
+.bullet { width:6px; height:15px; background:orange; position:absolute; }
+.enemyBullet { width:6px; height:15px; background:red; position:absolute; }
+/* Ennemis */
+.enemy { width:50px; height:50px; background:purple; position:absolute; clip-path: polygon(50% 0%,100% 100%,0% 100%); }
+/* Boss */
+#boss { width:140px; height:140px; background:darkred; position:absolute; top:20px; left:230px; clip-path: polygon(50% 0%,100% 50%,50% 100%,0% 50%); box-shadow:0 0 30px red; }
+#replay { display:none; font-size:24px; padding:10px; margin-top:10px; cursor:pointer; }
+</style>
+</head>
+
+<body>
+<h1>🛩️ JEU AVION FINAL</h1>
+<div id="score">Score : 0</div>
+<div id="bestScore">Meilleur Score : 0</div>
+<div id="lifeBar"><div id="life"></div></div>
+<button id="replay">Rejouer</button>
+<div id="game"><div id="player"></div></div>
+
+<!-- Sons et musique -->
+<audio id="shootSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_8f1c33f41a.mp3"></audio>
+<audio id="boomSound" src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_2c1d9c9f3a.mp3"></audio>
+<audio id="music" src="https://cdn.pixabay.com/download/audio/2023/03/28/audio_8bca3b75c2.mp3" loop autoplay></audio>
+
+<script>
+const game = document.getElementById("game");
+const player = document.getElementById("player");
+const scoreDiv = document.getElementById("score");
+const bestScoreDiv = document.getElementById("bestScore");
+const lifeDiv = document.getElementById("life");
+const replayBtn = document.getElementById("replay");
+
+let bullets = [], enemies = [], enemyBullets = [];
+let score = 0, life = 100, gameOver = false;
+let boss = null, bossLife = 0, bossActive = false, bossShootInterval = null;
+
+/* Meilleur score */
+let best = localStorage.getItem("meilleurScore") || 0;
+bestScoreDiv.textContent = "Meilleur Score : " + best;
+
+/* Souris */
+game.addEventListener("mousemove", e => {
+  let rect = game.getBoundingClientRect();
+  let x = e.clientX - rect.left - 40;
+  if (x < 0) x = 0;
+  if (x > 520) x = 520;
+  player.style.left = x + "px";
+});
+
+/* Tir automatique */
+setInterval(() => {
+  if (gameOver) return;
+  let b = document.createElement("div");
+  b.className = "bullet";
+  b.style.left = player.offsetLeft + 37 + "px";
+  b.style.top = "500px";
+  game.appendChild(b);
+  bullets.push(b);
+  document.getElementById("shootSound").cloneNode().play();
+}, 250);
+
+/* Ennemis */
+setInterval(() => {
+  if (gameOver || bossActive) return;
+  let e = document.createElement("div");
+  e.className = "enemy";
+  e.style.left = Math.random()*550 + "px";
+  e.style.top = "-50px";
+  game.appendChild(e);
+  enemies.push(e);
+
+  setInterval(() => {
+    if (!enemies.includes(e) || gameOver) return;
+    let eb = document.createElement("div");
+    eb.className = "enemyBullet";
+    eb.style.left = e.offsetLeft + 22 + "px";
+    eb.style.top = e.offsetTop + "px";
+    game.appendChild(eb);
+    enemyBullets.push(eb);
+  }, 1200);
+}, 800);
+
+/* Boss */
+function spawnBoss() {
+  boss = document.createElement("div");
+  boss.id = "boss";
+  game.appendChild(boss);
+  bossLife = 150;
+  bossActive = true;
+  bossShootInterval = setInterval(() => {
+    if (!bossActive) return;
+    let bb = document.createElement("div");
+    bb.className = "enemyBullet";
+    bb.style.left = boss.offsetLeft + 65 + "px";
+    bb.style.top = boss.offsetTop + 140 + "px";
+    game.appendChild(bb);
+    enemyBullets.push(bb);
+  }, 400);
+}
+
+/* Boucle du jeu */
+function gameLoop() {
+  if (gameOver) return;
+
+  bullets.forEach((b, bi) => {
+    b.style.top = b.offsetTop - 8 + "px";
+    if (b.offsetTop < 0) { b.remove(); bullets.splice(bi,1); }
+
+    enemies.forEach((e, ei) => {
+      if (b.offsetLeft < e.offsetLeft + 50 &&
+          b.offsetLeft + 6 > e.offsetLeft &&
+          b.offsetTop < e.offsetTop + 50 &&
+          b.offsetTop + 15 > e.offsetTop) {
+        e.remove(); b.remove();
+        enemies.splice(ei,1); bullets.splice(bi,1);
+        score += 100;
+        scoreDiv.textContent = "Score : " + score;
+        localStorage.setItem("dernierScore", score);
+        if (!localStorage.getItem("meilleurScore") || score > localStorage.getItem("meilleurScore")) {
+          localStorage.setItem("meilleurScore", score);
+        }
+        bestScoreDiv.textContent = "Meilleur Score : " + localStorage.getItem("meilleurScore");
+        document.getElementById("boomSound").cloneNode().play();
+      }
+    });
+
+    if (bossActive && boss) {
+      if (b.offsetLeft < boss.offsetLeft + 140 &&
+          b.offsetLeft + 6 > boss.offsetLeft &&
+          b.offsetTop < boss.offsetTop + 140) {
+        b.remove(); bullets.splice(bi,1);
+        bossLife--;
+        if (bossLife <= 0) {
+          boss.remove(); bossActive = false;
+          clearInterval(bossShootInterval); score += 5000;
+        }
+      }
+    }
+  });
+
+  enemies.forEach(e => { e.style.top = e.offsetTop + 2 + "px"; });
+
+  enemyBullets.forEach((b, i) => {
+    b.style.top = b.offsetTop + 5 + "px";
+    if (b.offsetTop > 600) { b.remove(); enemyBullets.splice(i,1); }
+    if (b.offsetTop > 520 && b.offsetLeft > player.offsetLeft && b.offsetLeft < player.offsetLeft + 80) {
+      life -= 10; lifeDiv.style.width = life + "%";
+      b.remove(); enemyBullets.splice(i,1);
+      if (life <= 0) { gameOver = true; replayBtn.style.display = "block"; }
+    }
+  });
+
+  if (score >= 80000 && !bossActive) spawnBoss();
+  if (score >= 100000) { alert("🏆 TU AS TERMINÉ LE JEU !"); gameOver = true; replayBtn.style.display = "block"; }
+
+  requestAnimationFrame(gameLoop);
+}
+
+replayBtn.onclick = () => location.reload();
+gameLoop();
+</script>
+</body>
+</html>
